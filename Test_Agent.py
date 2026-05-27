@@ -2,6 +2,7 @@ import os
 from textwrap import shorten
 from crewai import Agent, Task, Crew, Process, LLM
 from ddgs import DDGS
+import json
 
 key = os.getenv("GEMINI_API_KEY")
 if not key:
@@ -176,11 +177,36 @@ def writing(script: str, seo_data: str, analysis: Task) -> Task:
             "<final caption text here>\n \n"
             "Hashtags:\n"
             "#tag1 #tag2 #tag3 #tag4\n\n"
+            "MOST IMPORTANT: Return your final answer as VALID JSON ONLY, with this exact schema:\n"
+            "{\n"
+            '  "hooks": ["hook1", "hook2", "hook3"],\n'
+            '  "caption": "caption text here",\n'
+            '  "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4"]\n'
+            "}\n"
+            "Rules for JSON output:\n"
+            "- Do NOT include any explanation, prose, markdown, or backticks.\n"
+            "- Do NOT wrap the JSON in ```json or any other fences.\n"
+            "- Use double quotes for all keys and string values (valid JSON).\n"
+            "- The value for 'hooks' must be a list of exactly 3 strings.\n"
+            "- The value for 'hashtags' must be a list of exactly 4 strings.\n"
+            "- Start your response with '{' and end it with '}'.\n"
         ),
         agent = writer,
         # Context Tells The Agent The Current Point Of Discussion So That He Could Have A Better Understanding Of What's Going On And What's Needed From Him
         context=[analysis]
     )
+
+
+# JSON Parser
+def parse_json(text: str):
+    try:
+        return json.loads(str(text))
+    except json.JSONDecodeError as e:
+        print("Failed To Parse JSON from writer agent \n")
+        print("Error: ", e)
+        print("Original Text: ", text)
+        return None
+    
 
 # Making All Agents A Crew And Running
 
@@ -202,9 +228,36 @@ def run():
     crew = Crew(agents=[analyzer, writer], tasks=[analysis, caption], process=Process.sequential) # Runs Task In A One After Another Sequence
 
     print("Generating Captions, Hooks And Hashtags...\n")
-    result = crew.kickoff()
-    print("Analysis completed")
+    non_json_result = crew.kickoff()
+    print("Raw JSON String recieved from writer \n")
+
+    data = parse_json(non_json_result)
+    if data is None:
+        print("Failed To Generate Caption Due To JSON Parsing Error.")
+        return
+    
+    hooks = data.get("hooks", [])
+    caption = data.get("caption", "")
+    hashtags = data.get("hashtags", [])
+
     print("Caption Generated: \n")
-    print(result)
+    print("=== Parsed Hooks ===")
+    for i, h in enumerate(hooks, start=1):
+        print(f"{i}) {h}")
+    print("====================\n")
+
+    print("=== Parsed Caption ===")
+    print(caption)
+    print("======================\n")
+
+    print("=== Parsed Hashtags ===")
+    print(" ".join(hashtags))
+    print("=======================\n")
+
+    print("=== Ready-to-paste Description (any platform) ===")
+    print(caption)
+    print()
+    print(" ".join(hashtags))
+    print("===============================================")
 
 run()
