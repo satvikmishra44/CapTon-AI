@@ -1,5 +1,7 @@
 import os
+from textwrap import shorten
 from crewai import Agent, Task, Crew, Process, LLM
+from ddgs import DDGS
 
 key = os.getenv("GEMINI_API_KEY")
 if not key:
@@ -26,6 +28,44 @@ def get_script():
     
     return script
 
+# SEO Web Search
+def generate_query(script: str) -> str:
+    # Intro Of Script To Get The Main Topic
+    cleaned = " ".join(script.split())
+    intro = shorten(cleaned, width=150, placeholder="...")
+    return f"{intro} YouTube Video Topic"
+
+# Searching For SEO Keywords
+def fetch_seo_data(script: str, max = 5) -> str:
+    query = generate_query(script)
+    print(f"Performing SEO Search for {query !r}")
+
+    result = []
+    try:
+        with DDGS() as ddgs:
+            results = ddgs.text(query, max_results=max)
+            for idx, r in enumerate(results, start=1):
+                title = r.get("title") or ""
+                snippet = r.get("body") or ""
+                href = r.get("href") or ""
+
+                if not title and not snippet:
+                    continue
+
+                # Shortening For Manageable Context
+                short_snip = shorten(snippet, width=180, placeholder="...")
+                result.append(f"{idx}. {title} - {short_snip} ({href})")
+
+    except Exception as e:
+        print(f"Error In SEO Search: {e}")
+    
+    if not result:
+        print("No SEO data found.")
+
+    seo_data = "\n".join(result)
+    print("SEO Data Fetched")
+    return seo_data
+
 # Defining Agents
 
 # Analysis Agent
@@ -40,7 +80,7 @@ analyzer = Agent(
 # Writing Agent
 writer = Agent(
     role = "Caption Writer",
-    goal=("Use a structured analysis plus the script to write a high-converting, extra informative and CTA Engagement Oriented multi-platform caption that works on Instagram, Facebook And YouTube."),
+    goal=("Use a structured analysis plus the script and SEO web context to write a high-converting, extra informative and CTA Engagement Oriented multi-platform caption that works on Instagram, Facebook And YouTube."),
     backstory=("You are an expert social media copywriter who uses clear insights from analysts to write sharp, scroll-stopping and engagement farming captions for YouTube, Instagram, and Facebook."),
     llm = llm,
     verbose = True
@@ -48,43 +88,63 @@ writer = Agent(
 
 # Defining Task For Agent
 
-def analyzing(script: str) -> Task:
+def analyzing(script: str, seo_data: str) -> Task:
     return Task(
         description=(
-             "You are given a social media video script between <script> and </script>.\n"
-            "Analyze it and output a structured analysis with these sections:\n"
+             "You are given:\n"
+            "A) A social media video script between <script> and </script>.\n"
+            "B) Web search results about likely related topics between <seo> and </seo>.\n\n"
+            "Use BOTH to produce a structured analysis with these sections:\n"
             "1. Main Topic: (one line)\n"
             "2. Target Audience: (one line)\n"
             "3. Emotional Tone: (one or two words)\n"
             "4. Content Angle / Promise: (one or two lines)\n"
             "5. Key Points or Benefits: (bullet-style list in plain text)\n"
+            "6. SEO Keyword Ideas: (comma-separated list of short keyword phrases "
+            "based on BOTH the script and web search results.)\n"
             "Do NOT write a caption here. Only return the analysis.\n\n"
-            f"<script>\n{script}\n</script>"
+            f"<script>\n{script}\n</script>\n\n"
+            f"<seo>\n{seo_data}\n</seo>"
         ),
         agent = analyzer,
-        expected_output=("A concise, structured analysis document following the requested five-section format. "
-    "The content should be professional, insightful, and strictly limited to the required headers. "
-    "Ensure the 'Key Points' are extracted accurately as actionable takeaways, and avoid unnecessary conversational filler or introductory sentences.")
-    )
+        expected_output=("A comprehensive analysis report following this exact format:\n"
+            "1. Main Topic: [Single line description]\n"
+            "2. Target Audience: [Single line description]\n"
+            "3. Emotional Tone: [One or two words]\n"
+            "4. Content Angle / Promise: [One or two sentences]\n"
+            "5. Key Points or Benefits:\n"
+            "- [Point 1]\n"
+            "- [Point 2]\n"
+            "- [Point 3]\n"
+            "6. SEO Keyword Ideas: [Keyword1, Keyword2, Keyword3, Keyword4]\n"
+        ))
 
-def writing(script: str, analysis: Task) -> Task:
+def writing(script: str, seo_data: str, analysis: Task) -> Task:
     return Task(
         description=(
-            "You are a master social media strategist. Your goal is to write a high-engagement "
-            "caption that acts as a 'teaser' for the video script provided.\n\n"
-            "Instructions:\n"
-            "1. Start with a strong curiosity-driven hook based on the 'Content Angle' from the analysis.\n"
-            "2. Provide one 'Value-Add' point—an extra tip, a startling statistic, or a piece of context "
-            "not fully explored in the video. This ensures the audience feels they gain knowledge "
-            "just by reading the caption.\n"
-            "3. Frame the caption to be professional yet punchy for YouTube, Instagram, and Facebook.\n"
-            "4. Constraint: Exactly 2-3 sentences. No emojis. No hashtags. No filler words.\n"
-            "5. The final sentence must subtly encourage watching the video to master the concept.\n\n"
+           "You are a social media caption writer.\n"
+            "You will receive, in your context:\n"
+            "- A structured analysis of the script from another agent.\n"
+            "- Web search results related to the topic (SEO context).\n"
+            "You are also given the original script between <script> and </script>.\n\n"
+            "Your job:\n"
+            "1. Read and use the analysis and SEO context.\n"
+            "2. Write ONE caption (1-3 short sentences) that:\n"
+            "   - Is optimized for YouTube, Instagram Reels, and Facebook.\n"
+            "   - Hooks the viewer quickly.\n"
+            "   - Naturally weaves in 2-4 SEO-relevant phrases that match real search intent.\n"
+            "   - Still sounds human and not keyword-stuffed.\n"
+            "3. Do NOT include hashtags or emojis.\n"
+            "4. Do NOT repeat the full analysis text.\n"
+            "5. Do NOT paste the full script.\n"
+            "Return only the final caption.\n\n"
             f"<script>\n{script}\n</script>\n\n"
+            f"<seo>\n{seo_data}\n</seo>"
         ),
         expected_output=(
-            "A high-value, 2-3 sentence caption that provides a unique insight or 'secret' "
-            "related to the video topic, followed by a subtle call-to-action to watch the full content."
+            "A concise, high-converting social media caption (1-3 sentences) "
+            "that incorporates SEO phrases naturally without emojis or hashtags. "
+            "The output should contain ONLY the caption text."
         ),
         agent = writer,
         # Context Tells The Agent The Current Point Of Discussion So That He Could Have A Better Understanding Of What's Going On And What's Needed From Him
@@ -99,8 +159,14 @@ def run():
     print("Script Recieved...\n")
     print(f"Agent Started For Script... {script[:30]} \n")
 
-    analysis = analyzing(script)
-    caption = writing(script=script, analysis=analysis)
+    seo_data = fetch_seo_data(script=script)
+    print(f"SEO Data Fetched... {seo_data}")
+
+    print("Starting Analysis...")
+    analysis = analyzing(script, seo_data=seo_data)
+
+    print("Started Writing Caption...")
+    caption = writing(script=script, analysis=analysis, seo_data=seo_data)
 
     crew = Crew(agents=[analyzer, writer], tasks=[analysis, caption], process=Process.sequential) # Runs Task In A One After Another Sequence
 
