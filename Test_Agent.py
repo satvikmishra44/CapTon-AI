@@ -79,7 +79,7 @@ analyzer = Agent(
 
 # Writing Agent (Extending Hook Capability)
 writer = Agent(
-    role = "Caption Writer",
+    role = "Hook, Hashtag And Caption Writer",
     goal=("Use a structured analysis plus the script and SEO web context to write viral-style hooks and a high-converting, extra informative and CTA Engagement Oriented multi-platform caption that works on Instagram, Facebook And YouTube."),
     backstory=("You are an expert social media copywriter who blends audience psychology, viral hook patterns, and SEO keywords to grow reach on YouTube, Instagram, and Facebook."),
     llm = llm,
@@ -102,6 +102,10 @@ def analyzing(script: str, seo_data: str) -> Task:
             "5. Key Points or Benefits: (bullet-style list in plain text)\n"
             "6. SEO Keyword Ideas: (comma-separated list of short keyword phrases "
             "based on BOTH the script and web search results.)\n"
+             "7. Hook Angle Ideas: (2-3 short notes on what kind of hooks might work "
+            "best, e.g. problem, curiosity, bold claim, result, etc.)\n"
+            "8. Hashtag Themes: (2-3 short notes on what themes or topics the hashtags "
+            "should reflect, based on both the script and SEO context.)\n"
             "Do NOT write a caption here. Only return the analysis.\n\n"
             f"<script>\n{script}\n</script>\n\n"
             f"<seo>\n{seo_data}\n</seo>"
@@ -135,10 +139,14 @@ def writing(script: str, seo_data: str, analysis: Task) -> Task:
             "   - Hooks must stand alone as the opening line of a video or caption.\n"
             "3. Generate ONE main caption (1-3 short sentences) that:\n"
             "   - Is optimized for YouTube, Instagram, and Facebook.\n"
-            "   - Hooks the viewer quickly.\n"
-            "   - Naturally weaves in 2-4 SEO-relevant phrases that match real search intent.\n"
+            "   - Tell The Actual Reality Of Things Told In The Video Along With More Info On That Topic(But In The Similar Language Of Script)\n"
+            "   - Naturally weaves in as much SEO-relevant phrases as possible that match real search intent.\n"
             "   - Still sounds human and not keyword-stuffed.\n"
-            "4. Do NOT include hashtags or emojis.\n"
+            "4. Generate EXACTLY FOUR relevant, platform-agnostic hashtags that:\n"
+            "   - Reflect the main topic and audience.\n"
+            "   - Are short and readable (no extremely long hashtag strings).\n"
+            "   - Avoid ultra-generic tags like #fyp, #viral, #trending, #shorts.\n"
+            "   - Are safe to use across YouTube, Instagram, and Facebook.\n"
             "5. Do NOT paste the full script or full SEO results.\n"
             "6. Output MUST follow this exact format (no extra text):\n"
             "Hooks:\n"
@@ -165,7 +173,9 @@ def writing(script: str, seo_data: str, analysis: Task) -> Task:
             "3) <third hook>\n"
             "\n"
             "Caption:\n"
-            "<final caption text here>\n"
+            "<final caption text here>\n \n"
+            "Hashtags:\n"
+            "#tag1 #tag2 #tag3 #tag4\n\n"
         ),
         agent = writer,
         # Context Tells The Agent The Current Point Of Discussion So That He Could Have A Better Understanding Of What's Going On And What's Needed From Him
@@ -191,7 +201,7 @@ def run():
 
     crew = Crew(agents=[analyzer, writer], tasks=[analysis, caption], process=Process.sequential) # Runs Task In A One After Another Sequence
 
-    print("Generating Captions And Hooks...\n")
+    print("Generating Captions, Hooks And Hashtags...\n")
     result = crew.kickoff()
     print("Analysis completed")
     print("Caption Generated: \n")
