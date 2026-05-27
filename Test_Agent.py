@@ -77,11 +77,11 @@ analyzer = Agent(
     verbose = True
 )
 
-# Writing Agent
+# Writing Agent (Extending Hook Capability)
 writer = Agent(
     role = "Caption Writer",
-    goal=("Use a structured analysis plus the script and SEO web context to write a high-converting, extra informative and CTA Engagement Oriented multi-platform caption that works on Instagram, Facebook And YouTube."),
-    backstory=("You are an expert social media copywriter who uses clear insights from analysts to write sharp, scroll-stopping and engagement farming captions for YouTube, Instagram, and Facebook."),
+    goal=("Use a structured analysis plus the script and SEO web context to write viral-style hooks and a high-converting, extra informative and CTA Engagement Oriented multi-platform caption that works on Instagram, Facebook And YouTube."),
+    backstory=("You are an expert social media copywriter who blends audience psychology, viral hook patterns, and SEO keywords to grow reach on YouTube, Instagram, and Facebook."),
     llm = llm,
     verbose = True
 )
@@ -122,29 +122,50 @@ def analyzing(script: str, seo_data: str) -> Task:
 def writing(script: str, seo_data: str, analysis: Task) -> Task:
     return Task(
         description=(
-           "You are a social media caption writer.\n"
+          "You are a social media hook + caption writer.\n"
             "You will receive, in your context:\n"
             "- A structured analysis of the script from another agent.\n"
             "- Web search results related to the topic (SEO context).\n"
             "You are also given the original script between <script> and </script>.\n\n"
             "Your job:\n"
             "1. Read and use the analysis and SEO context.\n"
-            "2. Write ONE caption (1-3 short sentences) that:\n"
-            "   - Is optimized for YouTube, Instagram Reels, and Facebook.\n"
+            "2. Generate THREE short viral-style hooks (for YouTube Shorts, Instagram Reels, and Facebook Reels).\n"
+            "   - Each hook must be 5-12 words.\n"
+            "   - Use proven patterns like: problem hook, curiosity hook, bold claim hook, or result hook.\n"
+            "   - Hooks must stand alone as the opening line of a video or caption.\n"
+            "3. Generate ONE main caption (1-3 short sentences) that:\n"
+            "   - Is optimized for YouTube, Instagram, and Facebook.\n"
             "   - Hooks the viewer quickly.\n"
             "   - Naturally weaves in 2-4 SEO-relevant phrases that match real search intent.\n"
             "   - Still sounds human and not keyword-stuffed.\n"
-            "3. Do NOT include hashtags or emojis.\n"
-            "4. Do NOT repeat the full analysis text.\n"
-            "5. Do NOT paste the full script.\n"
-            "Return only the final caption.\n\n"
+            "4. Do NOT include hashtags or emojis.\n"
+            "5. Do NOT paste the full script or full SEO results.\n"
+            "6. Output MUST follow this exact format (no extra text):\n"
+            "Hooks:\n"
+            "1) <first hook>\n"
+            "2) <second hook>\n"
+            "3) <third hook>\n"
+            "\n"
+            "Caption:\n"
+            "<final caption text here>\n\n"
             f"<script>\n{script}\n</script>\n\n"
             f"<seo>\n{seo_data}\n</seo>"
         ),
         expected_output=(
-            "A concise, high-converting social media caption (1-3 sentences) "
-            "that incorporates SEO phrases naturally without emojis or hashtags. "
-            "The output should contain ONLY the caption text."
+            "Generate THREE short viral-style hooks ..."
+            "   - Each hook must be 5-12 words."
+            "   - Use proven patterns like: problem hook, curiosity hook, bold claim hook, or result hook."
+            " Generate ONE main caption (1-3 short sentences) that:"
+            "   - Is optimized for YouTube, Instagram, and Facebook."
+            "   - Naturally weaves in 7-8 SEO-relevant phrases in a human sounding way"
+            "Output MUST follow this exact format (no extra text):\n"
+            "Hooks:\n"
+            "1) <first hook>\n"
+            "2) <second hook>\n"
+            "3) <third hook>\n"
+            "\n"
+            "Caption:\n"
+            "<final caption text here>\n"
         ),
         agent = writer,
         # Context Tells The Agent The Current Point Of Discussion So That He Could Have A Better Understanding Of What's Going On And What's Needed From Him
@@ -170,7 +191,7 @@ def run():
 
     crew = Crew(agents=[analyzer, writer], tasks=[analysis, caption], process=Process.sequential) # Runs Task In A One After Another Sequence
 
-    print("Generating Captions...\n")
+    print("Generating Captions And Hooks...\n")
     result = crew.kickoff()
     print("Analysis completed")
     print("Caption Generated: \n")
