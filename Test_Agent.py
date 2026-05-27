@@ -5,7 +5,7 @@ key = os.getenv("GEMINI_API_KEY")
 if not key:
     raise ValueError("Gemini Key Not Available Or Read By Agent")
 
-llm = LLM("gemini/gemma-4-31b-it", api_key=key)
+llm = LLM("gemini/gemini-3.1-flash-lite", api_key=key)
 
 # Taking Script
 def get_script():
