@@ -135,7 +135,7 @@ def writing(script: str, seo_data: str, analysis: Task) -> Task:
             "Your job:\n"
             "1. Read and use the analysis and SEO context.\n"
             "2. Generate THREE short viral-style hooks (for YouTube Shorts, Instagram Reels, and Facebook Reels).\n"
-            "   - Each hook must be 5-12 words.\n"
+            "   - Each hook must be 5-12 words and in devnagri hindi.\n"
             "   - Use proven patterns like: problem hook, curiosity hook, bold claim hook, or result hook.\n"
             "   - Hooks must stand alone as the opening line of a video or caption.\n"
             "3. Generate ONE main caption (1-3 short sentences) that:\n"
