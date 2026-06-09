@@ -1,6 +1,36 @@
 import streamlit as st
-
+from st_copy_to_clipboard import st_copy_to_clipboard
 from main import run
+
+def set_progress_colour(color: str):
+    st.markdown(
+        f"""
+        <style>
+        .stProgress > div > div > div > div {{
+            background-color: {color};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def render_copyable_section(title: str, content: str, height: int = 140):
+    left, right = st.columns([8, 1])
+
+    with left:
+        st.subheader(title)
+
+    with right:
+        st.write("")
+        if content.strip():
+            st_copy_to_clipboard(content, "📋", key=f"copy_{title}")
+
+    st.text_area(
+        label=f"{title} content",
+        value=content,
+        height=height,
+        label_visibility="collapsed",
+    )
 
 def main():
     st.set_page_config(page_title="CapTON AI", page_icon=":guardsman:", layout="wide")
@@ -32,27 +62,29 @@ The system will:
 
     if generate:
         if not script.strip():
-            st.error("Please Enter Your Script First!!!")
-            return 
-        
+            st.error("Please paste a script before generating.")
+            return
+
+        set_progress_colour("#4CAF50")
         progress = st.progress(0)
-        # Status container for step-by-step messages
-        try:
-            with st.status("Initializing pipeline...", expanded=True) as status:
-                status.write("✅ Script received")
-                progress.progress(10)
 
-                status.write("✅ Workflow initialized")
-                progress.progress(20)
+        with st.status("Initializing pipeline...", expanded=True) as status:
+            status.write("✅ Script received")
+            progress.progress(10)
 
+            status.write("✅ Workflow initialized")
+            progress.progress(18)
+
+            status.write("⏳ Fetching SEO context...")
+            progress.progress(30)
+
+            try:
                 with st.spinner("Running SEO search and multi-agent CrewAI workflow..."):
-                    status.write("⏳ Fetching SEO context (DuckDuckGo)...")
-                    progress.progress(40)
-
-                    # Single call runs: SEO + Analyzer + JSON Writer
                     data = run(script)
 
                 if not data:
+                    set_progress_colour("#FF4B4B")
+                    progress.progress(100)
                     status.update(
                         label="❌ Pipeline failed (no data returned)",
                         state="error",
@@ -60,8 +92,11 @@ The system will:
                     )
                     st.error("Workflow failed (no data returned). Check backend logs.")
                     return
-                
+
                 if "error" in data:
+                    set_progress_colour("#FF4B4B")
+                    progress.progress(100)
+                    status.write("❌ SEO / workflow step failed")
                     status.update(
                         label="❌ Pipeline failed",
                         state="error",
@@ -70,11 +105,20 @@ The system will:
                     st.error(f"Workflow error: {data['error']}")
                     return
 
-                status.write("✅ SEO context ready")
-                progress.progress(70)
+                status.write("✅ SEO context fetched")
+                progress.progress(45)
 
-                status.write("✅ Analyzer + Writer agents completed")
-                progress.progress(90)
+                status.write("⏳ Analyzer agent is analyzing script...")
+                progress.progress(60)
+
+                status.write("✅ Analyzer finished")
+                progress.progress(72)
+
+                status.write("⏳ Writing caption now...")
+                progress.progress(88)
+
+                status.write("✅ Writer finished")
+                progress.progress(96)
 
                 status.update(
                     label="✅ Pipeline finished successfully",
@@ -83,50 +127,38 @@ The system will:
                 )
                 progress.progress(100)
 
-        except Exception as e:
-            st.error("Unexpected Error:" + str(e))
-            return 
+            except Exception as e:
+                set_progress_colour("#FF4B4B")
+                progress.progress(100)
+                status.update(
+                    label="❌ Pipeline failed unexpectedly",
+                    state="error",
+                    expanded=True,
+                )
+                st.error(f"Unexpected error: {e}")
+                return
 
         hooks = data.get("hooks", [])
         caption = data.get("caption", "")
         hashtags = data.get("hashtags", [])
 
-        # Displaying Hooks On Left And Caption + Hashtags On Right
+        hooks_text = "\n".join([f"{i}) {h}" for i, h in enumerate(hooks, start=1)])
+        hashtags_text = " ".join(hashtags)
+        final_description = f"{caption}\n\n{hashtags_text}".strip()
 
-        hooks_col, caption_col = st.columns([1, 2])
+        col1, col2, col3 = st.columns(3)
 
-        with hooks_col:
-            st.subheader("Hooks")
-            if hooks:
-                for i, h in enumerate(hooks, start=1):
-                    st.markdown(f"**{i})** {h}")
+        with col1:
+            render_copyable_section("Hooks", hooks_text, height=220)
 
-            else:
-                st.info("No Hooks Generated")
+        with col2:
+            render_copyable_section("Caption", caption, height=220)
 
-        with caption_col:
-            st.subheader("Caption With Hashtags")
-            if caption:
-                st.write(caption)
-            else:
-                st.info("No Caption Generated")
+        with col3:
+            render_copyable_section("Hashtags", hashtags_text, height=220)
 
-            st.subheader("Hashtags")
-            if(hashtags):
-                st.code(" ".join(hashtags), language=None)
-            else:
-                st.info("No Hashtags Generated")
-
-        st.markdown("----")
-
-        st.subheader("Ready To Paste Description")
-        if caption or hashtags:
-            description = caption + "\n\n" + " ".join(hashtags)
-            st.text_area("Description", value=description, height=200)
-
-        else:
-            st.info("No Description Generated")
-
+        st.markdown("---")
+        render_copyable_section("Ready-to-paste Description", final_description, height=220)
 
 if __name__ == "__main__":
     main()
