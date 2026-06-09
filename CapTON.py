@@ -1,232 +1,16 @@
-# import streamlit as st
-# from st_copy_to_clipboard import st_copy_to_clipboard
-# from agents import fetch_seo_data, analysis_step, writing_step, agents
-
-# st.set_page_config(
-#     page_title="CapTON AI",
-#     page_icon="✨",
-#     layout="wide",
-#     initial_sidebar_state="collapsed"
-# )
-
-# def inject_custom_css():
-#     """Hides default Streamlit elements for a cleaner SaaS look and styles inputs."""
-#     st.markdown(
-#         """
-#         <style>
-#         /* Hide main menu and footer */
-#         #MainMenu {visibility: hidden;}
-#         footer {visibility: hidden;}
-#         header {visibility: hidden;}
-        
-#         /* Better padding for top */
-#         .block-container {
-#             padding-top: 2rem;
-#             padding-bottom: 2rem;
-#         }
-        
-#         /* Custom styling for text areas to look more modern */
-#         .stTextArea textarea {
-#             border-radius: 8px;
-#             border: 1px solid #e0e0e0;
-#         }
-        
-#         /* Center text helper */
-#         .text-center {
-#             text-align: center;
-#         }
-#         </style>
-#         """,
-#         unsafe_allow_html=True,
-#     )
-
-# def set_progress_color(color: str, placeholder_container):
-#     """Dynamically updates the progress bar color."""
-#     placeholder_container.markdown(
-#         f"""
-#         <style>
-#         .stProgress > div > div > div > div {{
-#             background-color: {color} !important;
-#             transition: background-color 0.3s ease;
-#         }}
-#         </style>
-#         """,
-#         unsafe_allow_html=True,
-#     )
-
-# def render_copyable_section(title: str, content: str, height: int = 300):
-#     """Renders a text area with a clean header and a copy-to-clipboard button."""
-#     header_col, button_col = st.columns([9, 1])
-    
-#     with header_col:
-#         st.markdown(f"#### {title}")
-        
-#     with button_col:
-#         if content.strip():
-#             st_copy_to_clipboard(content, "📋", key=f"copy_{title}")
-
-#     st.text_area(
-#         label=f"{title} content",
-#         value=content,
-#         height=height,
-#         label_visibility="collapsed",
-#     )
-
-# # ==========================================
-# # MAIN APPLICATION LOGIC
-# # ==========================================
-# def main():
-#     inject_custom_css()
-
-#     st.markdown("<h1 class='text-center'>✨ CapTON AI</h1>", unsafe_allow_html=True)
-#     st.markdown(
-#         "<p class='text-center' style='color: #666; font-size: 1.1rem; margin-bottom: 2rem;'>"
-#         "Your Personal AI Agent For SEO Keywording And Caption Writing</p>", 
-#         unsafe_allow_html=True
-#     )
-
-#     col_input, col_output = st.columns([1, 1.2], gap="large")
-
-#     css_placeholder = st.empty()
-
-#     with col_input:
-#         st.markdown("### 📝 Input Script")
-#         st.markdown(
-#             "<p style='color: #888; font-size: 0.9rem;'>"
-#             "Paste your full video script below. The system will analyze the topic, "
-#             "fetch SEO context, and generate viral hooks and platform-agnostic hashtags.</p>",
-#             unsafe_allow_html=True
-#         )
-        
-#         script = st.text_area(
-#             "Video Script",
-#             value="",
-#             height=300,
-#             placeholder="Paste your video script here...",
-#             label_visibility="collapsed"
-#         )
-
-#         generate = st.button("🚀 Generate Content", type="primary", use_container_width=True)
-        
-#         status_placeholder = st.empty()
-
-#     with col_output:
-#         st.markdown("### 🎯 Generated Assets")
-        
-#         if "results" not in st.session_state:
-#             st.session_state.results = None
-
-#         if generate:
-#             if not script.strip():
-#                 st.error("⚠️ Please paste a script before generating.")
-#                 return
-
-#             st.session_state.results = None
-#             set_progress_color("#4CAF50", css_placeholder)
-            
-#             with status_placeholder.container():
-#                 progress = st.progress(0)
-                
-#                 with st.status("🧠 Processing your script...", expanded=True) as status:
-#                     try:
-#                         status.write("✅ Script received. Initializing workflow...")
-#                         progress.progress(10)
-
-#                         status.write("⏳ Fetching live SEO context...")
-#                         seo_context = fetch_seo_data(script=script)
-
-#                         if not seo_context:
-#                             raise ValueError("SEO context could not be fetched.")
-                            
-#                         status.write("✅ SEO context fetched")
-#                         progress.progress(40)
-
-#                         analyzer, writer = agents()
-
-#                         status.write("⏳ Analyzing topic, audience, and emotion...")
-#                         progress.progress(55)
-
-#                         analysis_result = analysis_step(
-#                             script=script,
-#                             seo_context=seo_context,
-#                             analyzer=analyzer,
-#                         )
-
-#                         if not isinstance(analysis_result, dict) or "error" in analysis_result:
-#                             error_msg = analysis_result.get('error', 'Unknown analysis error') if isinstance(analysis_result, dict) else f"Unexpected type: {type(analysis_result).__name__}"
-#                             raise ValueError(f"Analysis failed: {error_msg}")
-
-#                         analysis = analysis_result.get("analysis", "")
-#                         if not analysis:
-#                             raise ValueError("Analysis completed but returned empty text.")
-
-#                         status.write("✅ Analysis complete")
-#                         progress.progress(75)
-
-#                         status.write("⏳ Crafting hooks and captions...")
-#                         writing_result = writing_step(
-#                             script=script,
-#                             seo_context=seo_context,
-#                             analysis=analysis,
-#                             writer=writer,
-#                         )
-
-#                         if not isinstance(writing_result, dict) or "error" in writing_result:
-#                             error_msg = writing_result.get('error', 'Unknown writing error') if isinstance(writing_result, dict) else "Invalid output format."
-#                             raise ValueError(f"Writing failed: {error_msg}")
-
-#                         hooks = writing_result.get("hooks", [])
-#                         caption = writing_result.get("caption", "")
-#                         hashtags = writing_result.get("hashtags", [])
-
-#                         if not hooks and not caption and not hashtags:
-#                             raise ValueError("Writer completed but returned empty outputs.")
-
-#                         status.write("✅ Content generation finished!")
-#                         progress.progress(100)
-                        
-#                         status.update(label="✨ Pipeline finished successfully", state="complete", expanded=False)
-
-#                         st.session_state.results = {
-#                             "hooks": "\n".join([f"{i}) {h}" for i, h in enumerate(hooks, start=1)]),
-#                             "caption": caption,
-#                             "hashtags": " ".join(hashtags),
-#                             "final": f"{caption}\n\n{' '.join(hashtags)}".strip()
-#                         }
-
-#                     except Exception as e:
-#                         set_progress_color("#FF4B4B", css_placeholder) # Turn Red on Error
-#                         progress.progress(100)
-#                         status.update(label="❌ Pipeline Failed", state="error", expanded=True)
-#                         st.error(str(e))
-#                         return
-
-#         if st.session_state.results:
-#             tab1, tab2, tab3, tab4 = st.tabs(["🔥 Hooks", "✍️ Caption", "🏷️ Hashtags", "🚀 Ready-to-Paste"])
-            
-#             with tab1:
-#                 render_copyable_section("Viral Hooks", st.session_state.results["hooks"])
-#             with tab2:
-#                 render_copyable_section("Cross-Platform Caption", st.session_state.results["caption"])
-#             with tab3:
-#                 render_copyable_section("SEO Hashtags", st.session_state.results["hashtags"])
-#             with tab4:
-#                 render_copyable_section("Full Description", st.session_state.results["final"], height=400)
-#         else:
-
-#             st.info("👈 Paste your script and click 'Generate Content' to see your SEO-optimized assets appear here.")
-
-# if __name__ == "__main__":
-#     main()
-
 import streamlit as st
 from st_copy_to_clipboard import st_copy_to_clipboard
 from agents import fetch_seo_data, analysis_step, writing_step, agents
+import base64
+
+def getb64img(path: str) -> str:
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
 
 
 st.set_page_config(
     page_title="CapTON AI",
-    page_icon="✨",
+    page_icon="logo.png",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -629,25 +413,22 @@ def render_copyable_section(title: str, content: str, height: int = 280):
 
 # ─────────────────────────────────────────────────────────────────
 def main():
+    logo = getb64img("logo.png")
     inject_custom_css()
 
     # ── BRANDED HEADER ──────────────────────────────────────────
-    st.markdown("""
-    <div class="capton-header">
-        <div class="capton-logo">
-            <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect width="38" height="38" rx="11" fill="#7c6af7" fill-opacity="0.15"/>
-                <path d="M11.5 14C11.5 12.067 13.067 10.5 15 10.5H23C24.933 10.5 26.5 12.067 26.5 14V20.5C26.5 22.433 24.933 24 23 24H20.5L18.5 27.5L16.5 24H15C13.067 24 11.5 22.433 11.5 20.5V14Z"
-                    stroke="#c4b5fd" stroke-width="1.4" stroke-linejoin="round"/>
-                <circle cx="15.5" cy="17.25" r="1.1" fill="#c4b5fd"/>
-                <circle cx="19" cy="17.25" r="1.1" fill="#c4b5fd"/>
-                <circle cx="22.5" cy="17.25" r="1.1" fill="#c4b5fd"/>
-            </svg>
-            <span class="capton-wordmark">CapTON AI</span>
-        </div>
-        <div class="capton-tagline">SEO Keywording &amp; Caption Writing — Powered by AI Agents</div>
+    st.markdown(f"""
+<div class="capton-header">
+    <div class="capton-logo">
+        <img src="data:image/png;base64,{logo}"
+             width="156" height="156"
+             style="border-radius:11px; object-fit:contain;"
+             alt="CapTON AI Logo" />
+        <span class="capton-wordmark">CapTON AI</span>
     </div>
-    """, unsafe_allow_html=True)
+    <div class="capton-tagline">SEO Keywording &amp; Caption Writing — Powered by AI Agents</div>
+</div>
+""", unsafe_allow_html=True)
 
     st.markdown("""
     <div style="text-align:center;margin-bottom:2rem;">
