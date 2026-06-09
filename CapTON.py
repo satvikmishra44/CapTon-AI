@@ -37,41 +37,55 @@ The system will:
         
         progress = st.progress(0)
         # Status container for step-by-step messages
-        with st.status("Initializing pipeline...", expanded=True) as status:
-            status.write("✅ Script received")
-            progress.progress(10)
+        try:
+            with st.status("Initializing pipeline...", expanded=True) as status:
+                status.write("✅ Script received")
+                progress.progress(10)
 
-            status.write("✅ Workflow initialized")
-            progress.progress(20)
+                status.write("✅ Workflow initialized")
+                progress.progress(20)
 
-            with st.spinner("Running SEO search and multi-agent CrewAI workflow..."):
-                status.write("⏳ Fetching SEO context (DuckDuckGo)...")
-                progress.progress(40)
+                with st.spinner("Running SEO search and multi-agent CrewAI workflow..."):
+                    status.write("⏳ Fetching SEO context (DuckDuckGo)...")
+                    progress.progress(40)
 
-                # Single call runs: SEO + Analyzer + JSON Writer
-                data = run(script)
+                    # Single call runs: SEO + Analyzer + JSON Writer
+                    data = run(script)
 
-            if data is None:
+                if not data:
+                    status.update(
+                        label="❌ Pipeline failed (no data returned)",
+                        state="error",
+                        expanded=True,
+                    )
+                    st.error("Workflow failed (no data returned). Check backend logs.")
+                    return
+                
+                if "error" in data:
+                    status.update(
+                        label="❌ Pipeline failed",
+                        state="error",
+                        expanded=True,
+                    )
+                    st.error(f"Workflow error: {data['error']}")
+                    return
+
+                status.write("✅ SEO context ready")
+                progress.progress(70)
+
+                status.write("✅ Analyzer + Writer agents completed")
+                progress.progress(90)
+
                 status.update(
-                    label="❌ Pipeline failed (see terminal logs)",
-                    state="error",
-                    expanded=True,
+                    label="✅ Pipeline finished successfully",
+                    state="complete",
+                    expanded=False,
                 )
-                st.error("Workflow failed. Check the terminal logs for details.")
-                return
+                progress.progress(100)
 
-            status.write("✅ SEO context ready")
-            progress.progress(70)
-
-            status.write("✅ Analyzer + Writer agents completed")
-            progress.progress(90)
-
-            status.update(
-                label="✅ Pipeline finished successfully",
-                state="complete",
-                expanded=False,
-            )
-            progress.progress(100)
+        except Exception as e:
+            st.error("Unexpected Error:" + str(e))
+            return 
 
         hooks = data.get("hooks", [])
         caption = data.get("caption", "")

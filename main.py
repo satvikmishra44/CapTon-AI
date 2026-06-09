@@ -24,9 +24,13 @@ def main():
     print("Running Capton AI... \n")
     data = run(script=script)
 
-    if data is None:
-        print("Failed To Generate Captions")
-        return None
+    if not data:
+        print("!! Workflow failed with unknown error.")
+        return
+
+    if "error" in data:
+        print("!! Workflow error:", data["error"])
+        return
     
     hooks = data.get("hooks", [])
     caption = data.get("caption", [])

@@ -3,13 +3,15 @@ import json
 from crewai import Agent, Task, Crew, Process, LLM
 from seo_tools import fetch_seo_data
 
-key = os.getenv("GEMINI_API_KEY")
-if not key:
-    raise ValueError("Gemini Key Not Available Or Read By Agent")
+def get_llm() -> LLM:
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        raise ValueError("Gemini Key Not Available Or Read By Agent")
 
-llm = LLM("gemini/gemini-3.1-flash-lite", api_key=key)
+    return LLM("gemini/gemini-3.1-flash-lite", api_key=key)
 
 def agents():
+    llm = get_llm()
     # Analysis Agent
     analyzer = Agent(
         role = "Script Analyzer",
@@ -149,27 +151,31 @@ def parsing_output(output: str):
 def run(script: str):
     print("Starting SEO + multi-agent CrewAI workflow... \n")
 
-    seo_context = fetch_seo_data(script)
-    print(f"SEO Context Ready: {seo_context} \n")
+    try:
+        seo_context = fetch_seo_data(script)
+        print(f"SEO Context Ready: {seo_context} \n")
 
-    analyzer, writer = agents()
-    print("[✓] Analyzer and JSON Writer agents ready \n")
+        analyzer, writer = agents()
+        print("[✓] Analyzer and JSON Writer agents ready \n")
 
-    analysis = analysis_task(script, seo_context, analyzer)
-    writing = writing_task(script, seo_context, analysis, writer)
+        analysis = analysis_task(script, seo_context, analyzer)
+        writing = writing_task(script, seo_context, analysis, writer)
 
-    crew = Crew(agents=[analyzer, writer], tasks=[analysis, writing], process=Process.sequential)
+        crew = Crew(agents=[analyzer, writer], tasks=[analysis, writing], process=Process.sequential)
 
-    print("Running AI Agent Crew... \n")
-    data = crew.kickoff()
+        print("Running AI Agent Crew... \n")
+        data = crew.kickoff()
 
-    print("\n JSON String Recieved \n")
+        print("\n JSON String Recieved \n")
 
-    result = parsing_output(data)
+        result = parsing_output(data)
 
-    if result is None:
-        print("No Valid JSON to display \n")
-        return None
+        if result is None:
+            return {"error": "Failed to parse JSON output from writer agent."}
 
-    print("JSON Parsed Succesfully \n")
-    return result 
+        print("JSON Parsed Succesfully \n")
+        return result 
+
+    except Exception as e:
+        print("Workflow Failed", e)
+        return {"error": str(e)}
