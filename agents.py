@@ -67,7 +67,7 @@ def analysis_task(script: str, seo_data: str, analyzer: Agent) -> Task:
             "6. SEO Keyword Ideas: [Keyword1, Keyword2, Keyword3, Keyword4]\n"
         ))
 
-def writing_task(script: str, seo_data: str, analysis: Task, writer: Agent) -> Task:
+def writing_task(script: str, seo_data: str, analysis: str, writer: Agent) -> Task:
     return Task(
         description=(
           "You are a social media hook + caption writer.\n"
@@ -100,6 +100,7 @@ def writing_task(script: str, seo_data: str, analysis: Task, writer: Agent) -> T
             "\n"
             "Caption:\n"
             "<final caption text here>\n\n"
+            f"<analysis>\n{analysis}\n</analysis>\n\n"
             f"<script>\n{script}\n</script>\n\n"
             f"<seo>\n{seo_data}\n</seo>"
         ),
@@ -135,8 +136,6 @@ def writing_task(script: str, seo_data: str, analysis: Task, writer: Agent) -> T
             "- Start your response with '{' and end it with '}'.\n"
         ),
         agent = writer,
-        # Context Tells The Agent The Current Point Of Discussion So That He Could Have A Better Understanding Of What's Going On And What's Needed From Him
-        context=[analysis]
     )
 
 def parsing_output(output: str):
@@ -148,33 +147,84 @@ def parsing_output(output: str):
         print("Raw output was:\n", output)
         return None
     
-def run(script: str):
-    print("Starting SEO + multi-agent CrewAI workflow... \n")
-
+def seo_step(script: str):
     try:
-        seo_context = fetch_seo_data(script)
-        print(f"SEO Context Ready: {seo_context} \n")
+        print("Fetching SEO Data... \n")
+        seo_context = fetch_seo_data(script=script)
+        print(f"SEO Context Fetched: {seo_context} \n")
+        return {"seo_context": seo_context}
+    
+    except Exception as e:
+        print("SEO Fetching Failed")
+        return {"error": str(e)}
+    
+def analysis_step(script: str, seo_context: str, analyzer: Agent):
+    try:
+        print("Starting Analysis Agent... \n")
+        analysis = analysis_task(script=script, seo_data=seo_context, analyzer=analyzer)
+        crew = Crew(agents=[analyzer], tasks=[analysis], process=Process.sequential)
 
-        analyzer, writer = agents()
-        print("[✓] Analyzer and JSON Writer agents ready \n")
+        result = crew.kickoff()
+        print("[✓] Step 2 complete: Analyzer finished")
+        return {"analysis": str(result)}
+    
+    except Exception as e:
+        print("Analysis Failed", e)
+        return {"error": str(e)}
+    
+def writing_step(script: str, seo_context: str, analysis: str, writer: Agent):
+    try:
+        print("Starting Writing Agent...\n")
+        writing = writing_task(
+            script=script,
+            seo_data=seo_context,
+            analysis=analysis,
+            writer=writer,
+        )
+        crew = Crew(
+            agents=[writer],
+            tasks=[writing],
+            process=Process.sequential,
+        )
 
-        analysis = analysis_task(script, seo_context, analyzer)
-        writing = writing_task(script, seo_context, analysis, writer)
-
-        crew = Crew(agents=[analyzer, writer], tasks=[analysis, writing], process=Process.sequential)
-
-        print("Running AI Agent Crew... \n")
         data = crew.kickoff()
-
-        print("\n JSON String Recieved \n")
+        print("[✓] Step 3 complete: Writer finished")
 
         result = parsing_output(data)
-
         if result is None:
             return {"error": "Failed to parse JSON output from writer agent."}
 
-        print("JSON Parsed Succesfully \n")
-        return result 
+        return result
+    except Exception as e:
+        print("!! Step 3 failed:", e)
+        return {"error": str(e)}
+
+
+def run(script: str):
+    print("Starting multi-agent workflow...\n")
+
+    try:
+        seo_result = seo_step(script)
+        if "error" in seo_result:
+            return seo_result
+
+        seo_context = seo_result["seo_context"]
+        print(f"SEO Context Ready\n")
+
+        analyzer, writer = agents()
+
+        analysis_result = analysis_step(script, seo_context, analyzer=analyzer)
+        if "error" in analysis_result:
+            return analysis_result
+
+        analysis = analysis_result["analysis"]
+
+        writing_result = writing_step(script, seo_context, analysis, writer)
+        if "error" in writing_result:
+            return writing_result
+
+        print("JSON Parsed Successfully\n")
+        return writing_result
 
     except Exception as e:
         print("Workflow Failed", e)
