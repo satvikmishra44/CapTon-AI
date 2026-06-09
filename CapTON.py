@@ -35,19 +35,43 @@ The system will:
             st.error("Please Enter Your Script First!!!")
             return 
         
-        with st.expander("Agent Status...", expanded=True):
-            st.write("Script Recieved. Starting Agent....")
-            status_placeholder = st.empty()
+        progress = st.progress(0)
+        # Status container for step-by-step messages
+        with st.status("Initializing pipeline...", expanded=True) as status:
+            status.write("✅ Script received")
+            progress.progress(10)
 
-        with st.spinner("CapTON is getting SEO ready..."):
-            status_placeholder.write("Analyzing Script For Topic And Fetching SEO Context...")
-            data = run(script)
+            status.write("✅ Workflow initialized")
+            progress.progress(20)
 
-        if data is None:
-            st.error("An Internal Error Occured. Please Try Again Later.")
-            return 
-        
-        status_placeholder.write("Caption And Hooks Generated Succesfully! Displaying Results Below...")
+            with st.spinner("Running SEO search and multi-agent CrewAI workflow..."):
+                status.write("⏳ Fetching SEO context (DuckDuckGo)...")
+                progress.progress(40)
+
+                # Single call runs: SEO + Analyzer + JSON Writer
+                data = run(script)
+
+            if data is None:
+                status.update(
+                    label="❌ Pipeline failed (see terminal logs)",
+                    state="error",
+                    expanded=True,
+                )
+                st.error("Workflow failed. Check the terminal logs for details.")
+                return
+
+            status.write("✅ SEO context ready")
+            progress.progress(70)
+
+            status.write("✅ Analyzer + Writer agents completed")
+            progress.progress(90)
+
+            status.update(
+                label="✅ Pipeline finished successfully",
+                state="complete",
+                expanded=False,
+            )
+            progress.progress(100)
 
         hooks = data.get("hooks", [])
         caption = data.get("caption", "")
