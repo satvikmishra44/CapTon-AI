@@ -2,6 +2,7 @@ import streamlit as st
 from st_copy_to_clipboard import st_copy_to_clipboard
 from agents import fetch_seo_data, analysis_step, writing_step, agents
 import base64
+import hashlib
 
 def getb64img(path: str) -> str:
     with open(path, "rb") as f:
@@ -397,20 +398,40 @@ def set_progress_color(color: str, placeholder_container):
 
 
 def render_copyable_section(title: str, content: str, height: int = 280):
+
+    safe_title = (
+        title.lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+    )
+
+    generation_id = st.session_state.get("generation_id", 0)
+    text_key = f"output_{safe_title}_{generation_id}"
+
     header_col, button_col = st.columns([9, 1])
+
     with header_col:
         st.markdown(f"#### {title}")
-    with button_col:
-        if content.strip():
-            st_copy_to_clipboard(content, "📋", key=f"copy_{title}")
-    st.text_area(
+
+    edited_content = st.text_area(
         label=f"{title} content",
         value=content,
         height=height,
         label_visibility="collapsed",
+        key=text_key,
     )
 
+    content_hash = hashlib.sha256(
+        edited_content.encode("utf-8")
+    ).hexdigest()[:16]
 
+    with button_col:
+        if edited_content.strip():
+            st_copy_to_clipboard(
+                edited_content,
+                "📋",
+                key=f"copy_{safe_title}_{generation_id}_{content_hash}",
+            )
 # ─────────────────────────────────────────────────────────────────
 def main():
     logo = getb64img("logo.png")
@@ -489,6 +510,9 @@ def main():
         if "results" not in st.session_state:
             st.session_state.results = None
 
+        if "generation_id" not in st.session_state:
+            st.session_state.generation_id = 0
+
         if generate:
             if not script.strip():
                 st.error("⚠️  Please paste a script before generating.")
@@ -546,12 +570,15 @@ def main():
                         status.update(label="✨ Pipeline finished successfully", state="complete", expanded=False)
 
                         st.session_state.results = {
-                            "hooks":    "\n".join([f"{i}) {h}" for i, h in enumerate(hooks, start=1)]),
-                            "caption":  caption,
+                            "hooks": "\n".join(
+                                [f"{i}) {h}" for i, h in enumerate(hooks, start=1)]
+                            ),
+                            "caption": caption,
                             "hashtags": " ".join(hashtags),
-                            "final":    f"{caption}\n\n{' '.join(hashtags)}".strip()
+                            "final": f"{caption}\n\n{' '.join(hashtags)}".strip(),
                         }
 
+                        st.session_state.generation_id += 1
                     except Exception as e:
                         set_progress_color("#f87171", css_placeholder)
                         progress.progress(100)
