@@ -1,20 +1,17 @@
-"""
-CapTON AI — SEO keywording & caption writing studio.
-Redesigned UI — deployable as-is on Streamlit Community Cloud.
-"""
-
 import base64
 import hashlib
 import os
+import time
 
 import streamlit as st
 from st_copy_to_clipboard import st_copy_to_clipboard
 
-from agents import fetch_seo_data, analysis_step, writing_step, agents
+from jobs import submit_job, drain_progress
 
 
 # ── CONSTANTS ───────────────────────────────────────────────────
 LOGO_PATH = "logo.png"
+POLL_INTERVAL_SECONDS = 0.6
 
 LANGUAGE_OPTIONS = {
     "English": "English",
@@ -66,7 +63,6 @@ st.set_page_config(
 
 # ── HELPERS ─────────────────────────────────────────────────────
 def getb64img(path: str):
-    """Return base64 of the logo, or None so the UI can fall back gracefully."""
     try:
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode()
@@ -78,10 +74,8 @@ def inject_custom_css():
     st.markdown(
         """
         <style>
-        /* ─── FONTS ─── */
         @import url('https://api.fontshare.com/v2/css?f[]=satoshi@400,500,600,700&f[]=cabinet-grotesk@700,800&display=swap');
 
-        /* ─── DESIGN TOKENS ─── */
         :root {
             --bg:            #0a0a10;
             --surface:       #12121b;
@@ -108,12 +102,10 @@ def inject_custom_css():
             --t:             200ms var(--ease);
         }
 
-        /* ─── STRIP STREAMLIT CHROME ─── */
         #MainMenu, footer, header { visibility: hidden; }
         .stDeployButton { display: none !important; }
         [data-testid="stToolbar"], [data-testid="stDecoration"] { display: none !important; }
 
-        /* ─── APP SHELL ─── */
         .stApp {
             background:
                 radial-gradient(900px 520px at 12% -10%, rgba(124,106,247,0.13), transparent 60%),
@@ -138,13 +130,11 @@ def inject_custom_css():
         }
         ::selection { background: rgba(124,106,247,0.4); color: #fff; }
 
-        /* ─── ENTRANCE MOTION ─── */
         @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
         @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
         @keyframes shimmer { to { background-position: 200% center; } }
         @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.75); } }
 
-        /* ─── HEADER ─── */
         .capton-header { text-align: center; padding: 2.4rem 1rem 1.4rem; animation: rise 0.6s var(--ease) both; }
         .capton-logo-row { display: inline-flex; align-items: center; gap: 1rem; margin-bottom: 0.7rem; }
         .capton-logo-img {
@@ -171,7 +161,6 @@ def inject_custom_css():
         }
         .capton-tagline { font-size: 1.02rem; color: var(--text-muted); margin-top: 0.55rem; letter-spacing: 0.01em; }
 
-        /* ─── STATUS BADGE + CHIPS ─── */
         .capton-badge-wrap { text-align: center; margin-bottom: 0.9rem; }
         .capton-badge {
             display: inline-flex; align-items: center; gap: 0.45rem;
@@ -194,7 +183,6 @@ def inject_custom_css():
         }
         .capton-chip:hover { color: var(--text); border-color: var(--border-strong); transform: translateY(-1px); }
 
-        /* ─── GLASS CARDS (native bordered containers) ─── */
         [data-testid="stVerticalBlockBorderWrapper"] {
             background: linear-gradient(180deg, rgba(255,255,255,0.032), rgba(255,255,255,0.014)) !important;
             border: 1px solid var(--border) !important;
@@ -206,7 +194,6 @@ def inject_custom_css():
         }
         [data-testid="stVerticalBlockBorderWrapper"]:hover { border-color: var(--border-strong) !important; }
 
-        /* ─── PANEL HEADERS ─── */
         .panel-label {
             display: flex; align-items: center; gap: 0.45rem;
             font-size: 0.66rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
@@ -222,7 +209,6 @@ def inject_custom_css():
         }
         .panel-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.55; margin-bottom: 1.1rem; }
 
-        /* ─── WIDGET LABELS / CAPTIONS ─── */
         .stSelectbox label, .stTextArea label {
             font-size: 0.72rem !important; font-weight: 600 !important;
             letter-spacing: 0.08em !important; text-transform: uppercase !important;
@@ -230,8 +216,6 @@ def inject_custom_css():
         }
         [data-testid="stCaptionContainer"] { color: var(--text-faint) !important; font-size: 0.74rem !important; text-align: right; }
 
-        /* ─── TEXT AREAS ─── */
-        /* Strip every Streamlit wrapper so only our skin shows */
         .stTextArea [data-testid="stTextAreaRootElement"],
         .stTextArea [data-testid="stTextAreaRootElement"] > div,
         .stTextArea [data-baseweb="base-input"],
@@ -240,8 +224,6 @@ def inject_custom_css():
             border: none !important;
             box-shadow: none !important;
         }
-
-        /* The visible control: tinted glass with an inset shadow */
         .stTextArea [data-baseweb="textarea"] {
             background: rgba(255,255,255,0.028) !important;
             border: 1px solid var(--border) !important;
@@ -260,8 +242,6 @@ def inject_custom_css():
             box-shadow: 0 0 0 3px rgba(124,106,247,0.14),
                         inset 0 2px 10px rgba(0,0,0,0.2) !important;
         }
-
-        /* The textarea itself is now fully transparent */
         .stTextArea textarea {
             background: transparent !important;
             border: none !important;
@@ -280,15 +260,12 @@ def inject_custom_css():
             color: var(--text-faint) !important;
             opacity: 1 !important;
         }
-
-        /* "Press Ctrl+Enter…" hint text */
         .stTextArea [data-testid="stInputInstructions"],
         .stTextArea [data-testid="InputInstructions"] {
             color: var(--text-faint) !important;
             font-size: 0.7rem !important;
         }
 
-        /* ─── SELECTBOX ─── */
         [data-baseweb="select"] > div {
             background: rgba(10,10,16,0.55) !important;
             border: 1px solid var(--border) !important;
@@ -312,7 +289,6 @@ def inject_custom_css():
             background: var(--primary-soft) !important; color: var(--text) !important;
         }
 
-        /* ─── STEP LIST ─── */
         .step-list {
             display: flex; flex-direction: column; gap: 0.15rem;
             margin: 1.15rem 0 1.25rem; padding: 0.9rem 1rem;
@@ -328,7 +304,6 @@ def inject_custom_css():
             background: rgba(124,106,247,0.14); border: 1px solid rgba(124,106,247,0.32);
         }
 
-        /* ─── PRIMARY BUTTON ─── */
         .stButton > button[kind="primary"] {
             position: relative; overflow: hidden;
             background: linear-gradient(135deg, #8b7bff 0%, #6d5cf0 45%, #5a4fcf 100%) !important;
@@ -355,8 +330,13 @@ def inject_custom_css():
         .stButton > button[kind="primary"]:hover::before { left: 140%; }
         .stButton > button[kind="primary"]:active { transform: translateY(0) !important; }
         .stButton > button[kind="primary"]:focus-visible { outline: 2px solid var(--primary-hover) !important; outline-offset: 2px; }
+        .stButton > button[kind="primary"]:disabled {
+            opacity: 0.75 !important;
+            filter: saturate(0.7);
+            cursor: not-allowed !important;
+            transform: none !important;
+        }
 
-        /* ─── SECONDARY BUTTONS ─── */
         .stButton > button:not([kind="primary"]) {
             background: var(--surface-3) !important;
             color: var(--text-muted) !important;
@@ -371,7 +351,6 @@ def inject_custom_css():
             color: var(--primary-hover) !important;
         }
 
-        /* ─── TABS (segmented control) ─── */
         .stTabs [data-baseweb="tab-list"] {
             background: rgba(10,10,16,0.5) !important;
             border: 1px solid var(--border) !important;
@@ -396,7 +375,6 @@ def inject_custom_css():
         .stTabs [data-baseweb="tab-panel"] { padding: 0.2rem 0 0 !important; }
         .stTabs [data-baseweb="tab-border"], .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
 
-        /* ─── PROGRESS ─── */
         .stProgress > div > div {
             background: rgba(255,255,255,0.06) !important;
             border-radius: 999px !important; height: 5px !important; overflow: hidden;
@@ -407,7 +385,6 @@ def inject_custom_css():
             transition: width 0.4s var(--ease) !important;
         }
 
-        /* ─── STATUS / EXPANDER ─── */
         [data-testid="stExpander"] {
             background: rgba(18,18,27,0.7) !important;
             border: 1px solid var(--border) !important;
@@ -422,7 +399,6 @@ def inject_custom_css():
         [data-testid="stExpander"] summary:hover { color: var(--primary-hover) !important; }
         [data-testid="stExpander"] svg { fill: var(--text-muted) !important; }
 
-        /* ─── ALERTS ─── */
         .stAlert {
             background: rgba(18,18,27,0.8) !important;
             border: 1px solid var(--border) !important;
@@ -430,17 +406,14 @@ def inject_custom_css():
             font-size: 0.87rem !important;
         }
 
-        /* ─── MARKDOWN ─── */
         .stMarkdown p { color: var(--text-muted); font-size: 0.875rem; }
         .output-title {
             font-family: var(--font-display); font-size: 1rem; font-weight: 700;
             color: var(--text); letter-spacing: -0.01em; padding-top: 0.15rem;
         }
 
-        /* ─── COPY COMPONENT ALIGNMENT ─── */
         iframe[title*="copy"] { display: block; margin-left: auto; }
 
-        /* ─── EMPTY STATE ─── */
         .empty-wrap {
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             text-align: center; padding: 3.4rem 2rem; margin-top: 0.2rem;
@@ -459,7 +432,6 @@ def inject_custom_css():
         .empty-body { font-size: 0.82rem; color: var(--text-faint); line-height: 1.6; max-width: 32ch; }
         .empty-body b { color: var(--text-muted); }
 
-        /* ─── SKELETON LOADER ─── */
         .skel-stack { display: flex; flex-direction: column; gap: 0.8rem; padding: 0.4rem 0 0.2rem; }
         .skel {
             border-radius: 10px;
@@ -469,7 +441,6 @@ def inject_custom_css():
         }
         @keyframes skel { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
 
-        /* ─── FOOTER ─── */
         .capton-footer {
             text-align: center; margin-top: 2.8rem; padding-top: 1.4rem;
             border-top: 1px solid var(--border);
@@ -477,7 +448,6 @@ def inject_custom_css():
         }
         .capton-footer b { color: var(--text-muted); font-weight: 600; }
 
-        /* ─── SCROLLBAR / COLUMNS / RESPONSIVE ─── */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 999px; }
@@ -535,6 +505,12 @@ def render_copyable_section(title: str, content: str, height: int = 280):
             )
 
 
+def queue_generation():
+    """Form callback: fires before the main script reruns. Marks intent only."""
+    if not st.session_state.get("is_generating", False):
+        st.session_state.generation_requested = True
+
+
 # ── MAIN ────────────────────────────────────────────────────────
 def main():
     logo_b64 = getb64img(LOGO_PATH)
@@ -542,6 +518,12 @@ def main():
 
     st.session_state.setdefault("results", None)
     st.session_state.setdefault("generation_id", 0)
+    st.session_state.setdefault("is_generating", False)
+    st.session_state.setdefault("generation_requested", False)
+    st.session_state.setdefault("active_job", None)     # jobs.Job instance
+    st.session_state.setdefault("active_job_id", None)  # str, guards stale results
+    st.session_state.setdefault("progress_pct", 0)
+    st.session_state.setdefault("progress_log", [])
 
     # ── HEADER ──
     logo_html = (
@@ -618,10 +600,12 @@ def main():
                     unsafe_allow_html=True,
                 )
 
-                generate = st.form_submit_button(
-                    "✦ Generate Content",
+                st.form_submit_button(
+                    "✦ Generating…" if st.session_state.is_generating else "✦ Generate Content",
                     type="primary",
                     use_container_width=True,
+                    disabled=st.session_state.is_generating,
+                    on_click=queue_generation,
                 )
             status_placeholder = st.empty()
 
@@ -639,82 +623,89 @@ def main():
             )
 
             skeleton = st.empty()
-            busy = bool(generate and script.strip())
 
-            if generate and not script.strip():
+            # ── Step 1: consume a freshly queued submission → spawn a background job ──
+            generation_requested = st.session_state.generation_requested
+            st.session_state.generation_requested = False
+
+            if generation_requested and not script.strip():
+                st.session_state.is_generating = False
                 status_placeholder.error("⚠️ Please paste a script before generating.")
 
-            if busy:
+            elif generation_requested and script.strip():
+                st.session_state.is_generating = True
                 st.session_state.results = None
+                st.session_state.progress_pct = 0
+                st.session_state.progress_log = []
+                job = submit_job(script=script, output_language=output_language)
+                st.session_state.active_job = job
+                st.session_state.active_job_id = job.job_id
                 set_progress_color("linear-gradient(90deg, #7c6af7, #63b3ed)", css_placeholder)
+
+            # ── Step 2: if a job is active, poll it (non-blocking) ──
+            job = st.session_state.active_job
+            if job is not None and st.session_state.active_job_id == job.job_id:
                 skeleton.markdown(SKELETON_HTML, unsafe_allow_html=True)
-                success = False
+
+                for pct_or_tag, message in drain_progress(job):
+                    if pct_or_tag == "error":
+                        st.session_state.progress_log.append(("error", message))
+                    else:
+                        st.session_state.progress_pct = pct_or_tag
+                        st.session_state.progress_log.append(("info", message))
 
                 with status_placeholder.container():
-                    progress = st.progress(0)
+                    progress = st.progress(st.session_state.progress_pct)
                     with st.status("🧠 Processing your script…", expanded=True) as status:
-                        try:
-                            status.write("✅ Script received — initialising workflow…")
-                            progress.progress(10)
+                        for kind, message in st.session_state.progress_log:
+                            status.write(message)
 
-                            status.write("⏳ Fetching live SEO context…")
-                            seo_context = fetch_seo_data(script=script)
-                            if not seo_context:
-                                raise ValueError("SEO context could not be fetched.")
-                            status.write("✅ SEO context fetched")
-                            progress.progress(40)
+                        if job.future.done():
+                            try:
+                                result = job.future.result()
+                                hooks = result.get("hooks", [])
+                                caption = result.get("caption", "")
+                                hashtags = result.get("hashtags", [])
 
-                            analyzer, writer = agents()
-
-                            status.write("⏳ Analysing topic, audience, and emotion…")
-                            progress.progress(55)
-                            analysis_result = analysis_step(
-                                script=script, seo_context=seo_context, analyzer=analyzer,
-                            )
-                            if not isinstance(analysis_result, dict) or "error" in analysis_result:
-                                err = analysis_result.get("error", "Unknown") if isinstance(analysis_result, dict) else type(analysis_result).__name__
-                                raise ValueError(f"Analysis failed: {err}")
-                            analysis = analysis_result.get("analysis", "")
-                            if not analysis:
-                                raise ValueError("Analysis completed but returned empty text.")
-                            status.write("✅ Analysis complete")
-                            progress.progress(75)
-
-                            status.write(f"⏳ Crafting hooks and captions in {selected_language_name}…")
-                            writing_result = writing_step(
-                                script=script, seo_context=seo_context, analysis=analysis,
-                                writer=writer, output_language=output_language,
-                            )
-                            if not isinstance(writing_result, dict) or "error" in writing_result:
-                                err = writing_result.get("error", "Unknown") if isinstance(writing_result, dict) else "Invalid output."
-                                raise ValueError(f"Writing failed: {err}")
-                            hooks = writing_result.get("hooks", [])
-                            caption = writing_result.get("caption", "")
-                            hashtags = writing_result.get("hashtags", [])
-                            if not hooks and not caption and not hashtags:
-                                raise ValueError("Writer returned empty outputs.")
-
-                            status.write("✅ Content generation finished")
-                            progress.progress(100)
-                            status.update(label="✨ Pipeline finished successfully", state="complete", expanded=False)
-
-                            st.session_state.results = {
-                                "hooks": "\n".join(f"{i}) {h}" for i, h in enumerate(hooks, start=1)),
-                                "caption": caption,
-                                "hashtags": " ".join(hashtags),
-                                "final": f"{caption}\n\n{' '.join(hashtags)}".strip(),
-                            }
-                            st.session_state.generation_id += 1
-                            success = True
-                        except Exception as e:
-                            set_progress_color("#f87171", css_placeholder)
-                            progress.progress(100)
-                            status.update(label="❌ Pipeline failed", state="error", expanded=True)
-                            st.error(str(e))
-
-                skeleton.empty()
-                if success:
-                    st.toast("Your content is ready to copy ✨", icon="✨")
+                                # Guard: only apply if this is still the active job.
+                                if st.session_state.active_job_id == job.job_id:
+                                    st.session_state.results = {
+                                        "hooks": "\n".join(
+                                            f"{i}) {h}" for i, h in enumerate(hooks, start=1)
+                                        ),
+                                        "caption": caption,
+                                        "hashtags": " ".join(hashtags),
+                                        "final": f"{caption}\n\n{' '.join(hashtags)}".strip(),
+                                    }
+                                    st.session_state.generation_id += 1
+                                    status.update(
+                                        label="✨ Pipeline finished successfully",
+                                        state="complete",
+                                        expanded=False,
+                                    )
+                                    st.toast("Your content is ready to copy ✨", icon="✨")
+                            except Exception as exc:
+                                if st.session_state.active_job_id == job.job_id:
+                                    set_progress_color("#f87171", css_placeholder)
+                                    progress.progress(100)
+                                    status.update(
+                                        label="❌ Pipeline failed", state="error", expanded=True
+                                    )
+                                    st.error(str(exc))
+                            finally:
+                                # Unlock the button and force an immediate rerun so the
+                                # UI redraws with disabled=False on this very tick —
+                                # no extra click or interaction needed to "wake it up".
+                                if st.session_state.active_job_id == job.job_id:
+                                    st.session_state.is_generating = False
+                                    st.session_state.active_job = None
+                                    st.session_state.active_job_id = None
+                                    skeleton.empty()
+                                    st.rerun()
+                        else:
+                            # Still running — schedule the next poll without blocking the page.
+                            time.sleep(POLL_INTERVAL_SECONDS)
+                            st.rerun()
 
             if st.session_state.results:
                 tab1, tab2, tab3, tab4 = st.tabs(["🔥 Hooks", "✍️ Caption", "🏷️ Hashtags", "🚀 Ready-to-Paste"])
@@ -726,7 +717,7 @@ def main():
                     render_copyable_section("SEO Hashtags", st.session_state.results["hashtags"])
                 with tab4:
                     render_copyable_section("Full Description", st.session_state.results["final"], height=380)
-            elif not busy:
+            elif not st.session_state.is_generating:
                 st.markdown(EMPTY_STATE_HTML, unsafe_allow_html=True)
 
     # ── FOOTER ──
