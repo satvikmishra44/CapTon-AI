@@ -485,6 +485,33 @@ def main():
             label_visibility="collapsed"
         )
 
+        language_options = {
+            "English": "English",
+            "Hindi (Devanagari)": "Hindi written in Devanagari script",
+            "Hinglish": "Hinglish: natural Hindi-English mix written in Roman script",
+            "Spanish": "Spanish",
+            "French": "French",
+            "German": "German",
+            "Portuguese": "Portuguese",
+            "Arabic": "Arabic",
+            "Bengali": "Bengali",
+            "Tamil": "Tamil",
+            "Telugu": "Telugu",
+            "Marathi": "Marathi",
+            "Gujarati": "Gujarati",
+            "Punjabi": "Punjabi written in Gurmukhi script",
+            "Urdu": "Urdu written in Urdu script",
+        }
+
+        selected_language_name = st.selectbox(
+            "Content language",
+            options=list(language_options.keys()),
+            index=0,
+            help="Hooks, caption, and hashtags will be generated in this language.",
+        )
+
+        output_language = language_options[selected_language_name]
+
         st.markdown("""
         <div class="step-list">
             <div class="step-item"><div class="step-num">1</div>Live SEO context fetching</div>
@@ -554,7 +581,7 @@ def main():
 
                         status.write("⏳ Crafting hooks and captions…")
                         writing_result = writing_step(
-                            script=script, seo_context=seo_context, analysis=analysis, writer=writer,
+                            script=script, seo_context=seo_context, analysis=analysis, writer=writer, output_language=output_language
                         )
                         if not isinstance(writing_result, dict) or "error" in writing_result:
                             err = writing_result.get('error', 'Unknown') if isinstance(writing_result, dict) else "Invalid output."

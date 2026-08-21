@@ -67,7 +67,7 @@ def analysis_task(script: str, seo_data: str, analyzer: Agent) -> Task:
             "6. SEO Keyword Ideas: [Keyword1, Keyword2, Keyword3, Keyword4]\n"
         ))
 
-def writing_task(script: str, seo_data: str, analysis: str, writer: Agent) -> Task:
+def writing_task(script: str, seo_data: str, analysis: str, writer: Agent, output_language: str) -> Task:
     return Task(
         description=(
           "You are a social media hook + caption writer.\n"
@@ -76,19 +76,25 @@ def writing_task(script: str, seo_data: str, analysis: str, writer: Agent) -> Ta
             "- Web search results related to the topic (SEO context).\n"
             "You are also given the original script between <script> and </script>.\n\n"
             "Your job:\n"
+            f"OUTPUT LANGUAGE REQUIREMENT: Generate hooks, caption text, hashtag words, "
+            f"and all human-readable content entirely in {output_language}.\n"
+            "Do not default to Hindi, English, or the language of the input script.\n"
+            "Keep brand names, official product names, and universally recognized technical "
+            "terms unchanged only when translating them would sound unnatural.\n\n"
             "1. Read and use the analysis and SEO context.\n"
             "2. Generate THREE short viral-style hooks (for YouTube Shorts, Instagram Reels, and Facebook Reels).\n"
-            "   - Each hook must be 5-12 words and in devnagri hindi.\n"
+            f"   - Each hook must be 5-12 words and written in {output_language}.\n"
             "   - Use proven patterns like: problem hook, curiosity hook, bold claim hook, or result hook.\n"
             "   - Hooks must stand alone as the opening line of a video or caption.\n"
             "3. Generate ONE main caption (1-3 short sentences) that:\n"
             "   - Is optimized for YouTube, Instagram, and Facebook.\n"
-            "   - Tell The Actual Reality Of Things Told In The Video Along With More Info On That Topic(But In The Similar Language Of Script)\n"
+            f"   - Write the full caption in {output_language}, regardless of the language used in the source script.\n"
+            "   - Explain the reality of the topic discussed in the video and add useful, accurate context.\n"
             "   - Naturally weaves in as much SEO-relevant phrases as much as possible that match real search intent.\n"
             "   - Still sounds human and not keyword-stuffed.\n"
             "4. Generate EXACTLY FOUR relevant, platform-agnostic hashtags that:\n"
             "   - Reflect the main topic and audience.\n"
-            "   - Are short and readable (no extremely long hashtag strings).\n"
+            "   - Are short and readable (no extremely long hashtag strings) and always in english.\n"
             "   - Avoid ultra-generic tags like #fyp, #viral, #trending, #shorts.\n"
             "   - Are safe to use across YouTube, Instagram, and Facebook.\n"
             "5. Do NOT paste the full script or full SEO results.\n"
@@ -172,7 +178,7 @@ def analysis_step(script: str, seo_context: str, analyzer: Agent):
         print("Analysis Failed", e)
         return {"error": str(e)}
     
-def writing_step(script: str, seo_context: str, analysis: str, writer: Agent):
+def writing_step(script: str, seo_context: str, analysis: str, writer: Agent, output_language: str = "English"):
     try:
         print("Starting Writing Agent...\n")
         writing = writing_task(
@@ -180,6 +186,7 @@ def writing_step(script: str, seo_context: str, analysis: str, writer: Agent):
             seo_data=seo_context,
             analysis=analysis,
             writer=writer,
+            output_language=output_language
         )
         crew = Crew(
             agents=[writer],
@@ -200,7 +207,7 @@ def writing_step(script: str, seo_context: str, analysis: str, writer: Agent):
         return {"error": str(e)}
 
 
-def run(script: str):
+def run(script: str, output_language: str = "English"):
     print("Starting multi-agent workflow...\n")
 
     try:
@@ -219,7 +226,7 @@ def run(script: str):
 
         analysis = analysis_result["analysis"]
 
-        writing_result = writing_step(script, seo_context, analysis, writer)
+        writing_result = writing_step(script, seo_context, analysis, writer, output_language=output_language)
         if "error" in writing_result:
             return writing_result
 
