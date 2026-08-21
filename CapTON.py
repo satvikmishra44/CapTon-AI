@@ -287,7 +287,7 @@ def inject_custom_css():
             color: var(--text-faint) !important;
             font-size: 0.7rem !important;
         }
-        
+
         /* ─── SELECTBOX ─── */
         [data-baseweb="select"] > div {
             background: rgba(10,10,16,0.55) !important;
@@ -584,38 +584,46 @@ def main():
                 unsafe_allow_html=True,
             )
 
-            script = st.text_area(
-                "Video script",
-                value="",
-                height=270,
-                placeholder="Paste your video script here…\n\nThe AI agents will extract topic, "
-                            "audience signals, emotional hooks, and SEO keywords automatically.",
-                label_visibility="collapsed",
-            )
-            st.caption(f"{len(script.split())} words · {len(script)} characters")
+            with st.form("content_generator_form", clear_on_submit=False):
+                script = st.text_area(
+                    "Video script",
+                    value="",
+                    height=270,
+                    placeholder=(
+                        "Paste your video script here…\n\n"
+                        "The AI agents will extract topic, audience signals, emotional hooks, "
+                        "and SEO keywords automatically."
+                    ),
+                    label_visibility="collapsed",
+                )
 
-            selected_language_name = st.selectbox(
-                "Content language",
-                options=list(LANGUAGE_OPTIONS.keys()),
-                index=0,
-                help="Hooks, caption, and hashtags will be generated in this language.",
-            )
-            output_language = LANGUAGE_OPTIONS[selected_language_name]
+                st.caption(f"{len(script.split())} words · {len(script)} characters")
 
-            st.markdown(
-                """
-                <div class="step-list">
-                    <div class="step-item"><div class="step-num">1</div>Live SEO context fetching</div>
-                    <div class="step-item"><div class="step-num">2</div>Topic &amp; audience analysis</div>
-                    <div class="step-item"><div class="step-num">3</div>Hook &amp; caption generation</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                selected_language_name = st.selectbox(
+                    "Content language",
+                    options=list(LANGUAGE_OPTIONS.keys()),
+                    index=0,
+                    help="Hooks, caption, and hashtags will be generated in this language.",
+                )
+                output_language = LANGUAGE_OPTIONS[selected_language_name]
 
-            generate = st.button("✦ Generate Content", type="primary", use_container_width=True)
+                st.markdown(
+                    """
+                    <div class="step-list">
+                        <div class="step-item"><div class="step-num">1</div>Live SEO context fetching</div>
+                        <div class="step-item"><div class="step-num">2</div>Topic &amp; audience analysis</div>
+                        <div class="step-item"><div class="step-num">3</div>Hook &amp; caption generation</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-        status_placeholder = st.empty()
+                generate = st.form_submit_button(
+                    "✦ Generate Content",
+                    type="primary",
+                    use_container_width=True,
+                )
+            status_placeholder = st.empty()
 
     # ── RIGHT: OUTPUT ──
     with col_output:
