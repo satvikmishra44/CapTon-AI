@@ -1,6 +1,7 @@
 import queue
 import uuid
 import concurrent.futures
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -10,6 +11,7 @@ from agents import fetch_seo_data, analysis_step, writing_step, agents
 
 
 MAX_WORKERS = 4
+logger = logging.getLogger(__name__)
 
 
 @st.cache_resource(show_spinner=False)
@@ -86,6 +88,7 @@ def _run_pipeline(script: str, output_language: str, progress_q: "queue.Queue") 
         return {"hooks": hooks, "caption": caption, "hashtags": hashtags}
 
     except Exception as exc:
+        logger.exception("Generation worker failed")
         progress_q.put(("error", str(exc)))
         raise
 
@@ -94,6 +97,7 @@ def submit_job(script: str, output_language: str) -> Job:
     """Submits a new pipeline run to the shared executor and returns its Job handle."""
     executor = get_executor()
     progress_q: "queue.Queue" = queue.Queue()
+    logger.info("Submitting generation job for %d characters", len(script))
     future = executor.submit(_run_pipeline, script, output_language, progress_q)
     return Job(
         job_id=str(uuid.uuid4()),

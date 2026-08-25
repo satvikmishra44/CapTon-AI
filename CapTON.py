@@ -505,12 +505,6 @@ def render_copyable_section(title: str, content: str, height: int = 280):
             )
 
 
-def queue_generation():
-    """Form callback: fires before the main script reruns. Marks intent only."""
-    if not st.session_state.get("is_generating", False):
-        st.session_state.generation_requested = True
-
-
 # ── MAIN ────────────────────────────────────────────────────────
 def main():
     logo_b64 = getb64img(LOGO_PATH)
@@ -519,7 +513,6 @@ def main():
     st.session_state.setdefault("results", None)
     st.session_state.setdefault("generation_id", 0)
     st.session_state.setdefault("is_generating", False)
-    st.session_state.setdefault("generation_requested", False)
     st.session_state.setdefault("active_job", None)     # jobs.Job instance
     st.session_state.setdefault("active_job_id", None)  # str, guards stale results
     st.session_state.setdefault("progress_pct", 0)
@@ -600,12 +593,11 @@ def main():
                     unsafe_allow_html=True,
                 )
 
-                st.form_submit_button(
+                generate = st.form_submit_button(
                     "✦ Generating…" if st.session_state.is_generating else "✦ Generate Content",
                     type="primary",
                     use_container_width=True,
                     disabled=st.session_state.is_generating,
-                    on_click=queue_generation,
                 )
             status_placeholder = st.empty()
 
@@ -624,23 +616,26 @@ def main():
 
             skeleton = st.empty()
 
-            # ── Step 1: consume a freshly queued submission → spawn a background job ──
-            generation_requested = st.session_state.generation_requested
-            st.session_state.generation_requested = False
-
-            if generation_requested and not script.strip():
+            # The form submit result is reliable across Streamlit reruns and avoids
+            # handing the click through a second session-state callback.
+            if generate and not script.strip():
                 st.session_state.is_generating = False
                 status_placeholder.error("⚠️ Please paste a script before generating.")
 
-            elif generation_requested and script.strip():
+            elif generate and script.strip():
                 st.session_state.is_generating = True
                 st.session_state.results = None
                 st.session_state.progress_pct = 0
                 st.session_state.progress_log = []
-                job = submit_job(script=script, output_language=output_language)
-                st.session_state.active_job = job
-                st.session_state.active_job_id = job.job_id
-                set_progress_color("linear-gradient(90deg, #7c6af7, #63b3ed)", css_placeholder)
+                try:
+                    job = submit_job(script=script, output_language=output_language)
+                except Exception as exc:
+                    st.session_state.is_generating = False
+                    status_placeholder.error(f"Could not start generation: {exc}")
+                else:
+                    st.session_state.active_job = job
+                    st.session_state.active_job_id = job.job_id
+                    set_progress_color("linear-gradient(90deg, #7c6af7, #63b3ed)", css_placeholder)
 
             # ── Step 2: if a job is active, poll it (non-blocking) ──
             job = st.session_state.active_job
