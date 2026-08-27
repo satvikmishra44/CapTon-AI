@@ -47,7 +47,7 @@ def _search_ddgs(query: str, max_results: int) -> list[dict]:
         )
 
 
-def fetch_seo_data(script: str, max: int = 5) -> str:
+def fetch_seo_data(script: str, max_results: int = 5) -> str:
     """
     Fetch SEO/search context without allowing search failure
     to kill the entire generation pipeline.
@@ -57,7 +57,7 @@ def fetch_seo_data(script: str, max: int = 5) -> str:
     query. In those cases we retry with progressively simpler
     queries and finally return a fallback context.
     """
-    max_results = max(1, min(int(max), 10))
+    max_results = max(1, min(int(max_results), 10))
 
     cleaned = _clean_query(script, max_words=24)
 
