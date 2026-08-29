@@ -717,7 +717,7 @@ def main():
 
     # ── FOOTER ──
     st.markdown(
-        '<div class="capton-footer"><b>CapTON AI</b> · Multi-agent SEO content pipeline · Built with Streamlit</div>',
+        '<div class="capton-footer"><b>CapTON AI</b> · Multi-agent SEO caption pipeline · Built by <a href="https://satvikmishra44.github.io/Portfolio/">Satvik Mishra</a></div>',
         unsafe_allow_html=True,
     )
 
