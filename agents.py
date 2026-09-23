@@ -1,7 +1,12 @@
 import os
 import json
+import logging
 from crewai import Agent, Task, Crew, Process, LLM
 from seo_tools import fetch_seo_data
+from error_utils import extract_friendly_error
+
+logger = logging.getLogger(__name__)
+
 
 def get_llm() -> LLM:
     key = os.getenv("GEMINI_API_KEY")
@@ -10,32 +15,34 @@ def get_llm() -> LLM:
 
     return LLM("gemini/gemini-3.1-flash-lite", api_key=key)
 
+
 def agents():
     llm = get_llm()
     # Analysis Agent
     analyzer = Agent(
-        role = "Script Analyzer",
+        role="Script Analyzer",
         goal=("Deeply analyze the given video script and extract topic, target audience, emotional tone, and main content angle."),
-        backstory = ("You are a strategic content analyst who understands social media audiences. You break scripts into clear, structured insights that other agents can use."),
-        llm = llm, 
-        verbose = True
+        backstory=("You are a strategic content analyst who understands social media audiences. You break scripts into clear, structured insights that other agents can use."),
+        llm=llm,
+        verbose=True
     )
 
     # Writing Agent (Extending Hook Capability)
     writer = Agent(
-        role = "Hook, Hashtag And Caption Writer",
+        role="Hook, Hashtag And Caption Writer",
         goal=("Use a structured analysis plus the script and SEO web context to write viral-style hooks and a high-converting, extra informative and CTA Engagement Oriented multi-platform caption that works on Instagram, Facebook And YouTube."),
         backstory=("You are an expert social media copywriter who blends audience psychology, viral hook patterns, and SEO keywords to grow reach on YouTube, Instagram, and Facebook."),
-        llm = llm,
-        verbose = True
+        llm=llm,
+        verbose=True
     )
 
     return analyzer, writer
 
+
 def analysis_task(script: str, seo_data: str, analyzer: Agent) -> Task:
-     return Task(
+    return Task(
         description=(
-             "You are given:\n"
+            "You are given:\n"
             "A) A social media video script between <script> and </script>.\n"
             "B) Web search results about likely related topics between <seo> and </seo>.\n\n"
             "Use BOTH to produce a structured analysis with these sections:\n"
@@ -46,7 +53,7 @@ def analysis_task(script: str, seo_data: str, analyzer: Agent) -> Task:
             "5. Key Points or Benefits: (bullet-style list in plain text)\n"
             "6. SEO Keyword Ideas: (comma-separated list of short keyword phrases "
             "based on BOTH the script and web search results.)\n"
-             "7. Hook Angle Ideas: (2-3 short notes on what kind of hooks might work "
+            "7. Hook Angle Ideas: (2-3 short notes on what kind of hooks might work "
             "best, e.g. problem, curiosity, bold claim, result, etc.)\n"
             "8. Hashtag Themes: (2-3 short notes on what themes or topics the hashtags "
             "should reflect, based on both the script and SEO context.)\n"
@@ -54,7 +61,7 @@ def analysis_task(script: str, seo_data: str, analyzer: Agent) -> Task:
             f"<script>\n{script}\n</script>\n\n"
             f"<seo>\n{seo_data}\n</seo>"
         ),
-        agent = analyzer,
+        agent=analyzer,
         expected_output=("A comprehensive analysis report following this exact format:\n"
             "1. Main Topic: [Single line description]\n"
             "2. Target Audience: [Single line description]\n"
@@ -67,10 +74,11 @@ def analysis_task(script: str, seo_data: str, analyzer: Agent) -> Task:
             "6. SEO Keyword Ideas: [Keyword1, Keyword2, Keyword3, Keyword4]\n"
         ))
 
+
 def writing_task(script: str, seo_data: str, analysis: str, writer: Agent, output_language: str) -> Task:
     return Task(
         description=(
-          "You are a social media hook + caption writer.\n"
+            "You are a social media hook + caption writer.\n"
             "You will receive, in your context:\n"
             "- A structured analysis of the script from another agent.\n"
             "- Web search results related to the topic (SEO context).\n"
@@ -141,46 +149,48 @@ def writing_task(script: str, seo_data: str, analysis: str, writer: Agent, outpu
             "- The value for 'hashtags' must be a list of exactly 4 strings.\n"
             "- Start your response with '{' and end it with '}'.\n"
         ),
-        agent = writer,
+        agent=writer,
     )
 
+
 def parsing_output(output: str):
-    try: 
+    try:
         return json.loads(str(output))
-    except json.JSONDecodeError as e:
-        print("!! Failed to parse JSON output from writer agent.")
-        print("Error:", e)
-        print("Raw output was:\n", output)
+    except (json.JSONDecodeError, TypeError) as e:
+        logger.exception("Failed to parse JSON output from writer agent. Raw output: %r", output)
         return None
-    
+
+
 def seo_step(script: str):
     try:
-        print("Fetching SEO Data... \n")
+        logger.info("Fetching SEO data...")
         seo_context = fetch_seo_data(script=script)
-        print(f"SEO Context Fetched: {seo_context} \n")
+        logger.info("SEO context fetched: %s", seo_context)
         return {"seo_context": seo_context}
-    
+
     except Exception as e:
-        print("SEO Fetching Failed")
-        return {"error": str(e)}
-    
+        logger.exception("SEO fetching failed")
+        return {"error": extract_friendly_error(e)}
+
+
 def analysis_step(script: str, seo_context: str, analyzer: Agent):
     try:
-        print("Starting Analysis Agent... \n")
+        logger.info("Starting analysis agent...")
         analysis = analysis_task(script=script, seo_data=seo_context, analyzer=analyzer)
         crew = Crew(agents=[analyzer], tasks=[analysis], process=Process.sequential)
 
         result = crew.kickoff()
-        print("[✓] Step 2 complete: Analyzer finished")
+        logger.info("Step 2 complete: analyzer finished")
         return {"analysis": str(result)}
-    
+
     except Exception as e:
-        print("Analysis Failed", e)
-        return {"error": str(e)}
-    
+        logger.exception("Analysis step failed")
+        return {"error": extract_friendly_error(e)}
+
+
 def writing_step(script: str, seo_context: str, analysis: str, writer: Agent, output_language: str = "English"):
     try:
-        print("Starting Writing Agent...\n")
+        logger.info("Starting writing agent...")
         writing = writing_task(
             script=script,
             seo_data=seo_context,
@@ -195,20 +205,20 @@ def writing_step(script: str, seo_context: str, analysis: str, writer: Agent, ou
         )
 
         data = crew.kickoff()
-        print("[✓] Step 3 complete: Writer finished")
+        logger.info("Step 3 complete: writer finished")
 
         result = parsing_output(data)
         if result is None:
-            return {"error": "Failed to parse JSON output from writer agent."}
+            return {"error": "The AI returned an unexpected response format. Please try again."}
 
         return result
     except Exception as e:
-        print("!! Step 3 failed:", e)
-        return {"error": str(e)}
+        logger.exception("Writing step failed")
+        return {"error": extract_friendly_error(e)}
 
 
 def run(script: str, output_language: str = "English"):
-    print("Starting multi-agent workflow...\n")
+    logger.info("Starting multi-agent workflow...")
 
     try:
         seo_result = seo_step(script)
@@ -216,7 +226,7 @@ def run(script: str, output_language: str = "English"):
             return seo_result
 
         seo_context = seo_result["seo_context"]
-        print(f"SEO Context Ready\n")
+        logger.info("SEO context ready")
 
         analyzer, writer = agents()
 
@@ -230,9 +240,9 @@ def run(script: str, output_language: str = "English"):
         if "error" in writing_result:
             return writing_result
 
-        print("JSON Parsed Successfully\n")
+        logger.info("JSON parsed successfully")
         return writing_result
 
     except Exception as e:
-        print("Workflow Failed", e)
-        return {"error": str(e)}
+        logger.exception("Workflow failed")
+        return {"error": extract_friendly_error(e)}
