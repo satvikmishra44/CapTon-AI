@@ -2,14 +2,18 @@ import base64
 import hashlib
 import os
 import time
+import logging
 
 import streamlit as st
 from st_copy_to_clipboard import st_copy_to_clipboard
 
 from jobs import submit_job, drain_progress
+from error_utils import extract_friendly_error
 
 
 # ── CONSTANTS ───────────────────────────────────────────────────
+
+logging.basicConfig(level=logging.INFO)
 LOGO_PATH = "logo.png"
 POLL_INTERVAL_SECONDS = 0.6
 
@@ -465,6 +469,7 @@ def inject_custom_css():
         unsafe_allow_html=True,
     )
 
+st.session_state.setdefault("last_error", None)
 
 def set_progress_color(color: str, placeholder_container):
     placeholder_container.markdown(
@@ -684,14 +689,18 @@ def main():
                                         expanded=False,
                                     )
                                     st.toast("Your content is ready to copy ✨", icon="✨")
+
                             except Exception as exc:
                                 if st.session_state.active_job_id == job.job_id:
+                                    friendly_msg = extract_friendly_error(exc)
+                                    st.session_state.last_error = friendly_msg
                                     set_progress_color("#f87171", css_placeholder)
                                     progress.progress(100)
                                     status.update(
                                         label="❌ Pipeline failed", state="error", expanded=True
                                     )
-                                    st.error(str(exc))
+                                    status.write(f"❌ {friendly_msg}")
+
                             finally:
                                 # Unlock the button and force an immediate rerun so the
                                 # UI redraws with disabled=False on this very tick —
@@ -706,6 +715,9 @@ def main():
                             # Still running — schedule the next poll without blocking the page.
                             time.sleep(POLL_INTERVAL_SECONDS)
                             st.rerun()
+
+            if st.session_state.last_error and not st.session_state.is_generating:
+                st.error(f"⚠️ {st.session_state.last_error}")
 
             if st.session_state.results:
                 tab1, tab2, tab3, tab4 = st.tabs(["🔥 Hooks", "✍️ Caption", "🏷️ Hashtags", "🚀 Ready-to-Paste"])
