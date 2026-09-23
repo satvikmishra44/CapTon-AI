@@ -48,19 +48,11 @@ def _run_pipeline(script: str, output_language: str, progress_q: "queue.Queue") 
         report(10, "✅ Script received — initialising workflow…")
 
         report(20, "⏳ Fetching live SEO context…")
-        try:
-            seo_context = fetch_seo_data(script=script)
-        except Exception as e:
-            # SEO context is enrichment, not critical — log it, warn the user,
-            # and continue the pipeline with empty SEO context instead of failing outright.
-            logger.exception("SEO fetch failed; continuing without SEO context")
-            seo_context = ""
-            report(35, f"⚠️ Skipping SEO context — {extract_friendly_error(e)}")
+        seo_context = fetch_seo_data(script=script)
+        if not seo_context:
+            report(35, "⚠️ No SEO results found — continuing without SEO context")
         else:
-            if not seo_context:
-                report(35, "⚠️ No SEO results found — continuing without SEO context")
-            else:
-                report(40, "✅ SEO context fetched")
+            report(40, "✅ SEO context fetched")
 
         try:
             analyzer, writer = agents()
