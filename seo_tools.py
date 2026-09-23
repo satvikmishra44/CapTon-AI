@@ -1,5 +1,9 @@
+import logging
 from textwrap import shorten
 from ddgs import DDGS
+
+logger = logging.getLogger(__name__)
+
 
 def generate_query(script: str) -> str:
     # Intro Of Script To Get The Main Topic
@@ -7,14 +11,21 @@ def generate_query(script: str) -> str:
     intro = shorten(cleaned, width=150, placeholder="...")
     return f"{intro} YouTube Video Topic"
 
-def fetch_seo_data(script: str, max = 5) -> str:
+
+def fetch_seo_data(script: str, max_results: int = 5) -> str:
+    """Fetches lightweight SEO context via DuckDuckGo search.
+
+    Raises on real failures (network/search errors) so the caller can decide
+    whether that's fatal. Returns "" (no exception) when the search succeeds
+    but simply finds nothing — that's a normal, non-fatal outcome.
+    """
     query = generate_query(script)
-    print(f"Performing SEO Search for {query !r}")
+    logger.info("Performing SEO search for %r", query)
 
     result = []
     try:
         with DDGS() as ddgs:
-            results = ddgs.text(query, max_results=max)
+            results = ddgs.text(query, max_results=max_results)
             for idx, r in enumerate(results, start=1):
                 title = r.get("title") or ""
                 snippet = r.get("body") or ""
@@ -28,11 +39,12 @@ def fetch_seo_data(script: str, max = 5) -> str:
                 result.append(f"{idx}. {title} - {short_snip} ({href})")
 
     except Exception as e:
-        print(f"Error In SEO Search: {e}")
-    
+        logger.exception("SEO search failed")
+        raise RuntimeError(f"SEO search failed: {e}") from e
+
     if not result:
-        print("No SEO data found.")
+        logger.warning("SEO search returned no results for query: %r", query)
 
     seo_data = "\n".join(result)
-    print("SEO Data Fetched")
+    logger.info("SEO data fetched (%d results)", len(result))
     return seo_data
