@@ -1,13 +1,16 @@
+import logging
 import queue
 import uuid
 import concurrent.futures
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import streamlit as st
 
 from agents import fetch_seo_data, analysis_step, writing_step, agents
+from error_utils import extract_friendly_error
 
+logger = logging.getLogger(__name__)
 
 MAX_WORKERS = 4
 
@@ -30,7 +33,13 @@ class Job:
 
 
 def _run_pipeline(script: str, output_language: str, progress_q: "queue.Queue") -> dict:
-    """Runs entirely inside a worker thread. Reports progress via a thread-safe queue."""
+    """Runs entirely inside a worker thread. Reports progress via a thread-safe queue.
+
+    Every failure path here is converted to a short, user-safe message via
+    extract_friendly_error() before it reaches the UI. Full technical details
+    (stack traces, raw provider errors) are always sent to the server logs
+    via logging.exception() so nothing is lost for debugging.
+    """
 
     def report(pct: int, message: str) -> None:
         progress_q.put((pct, message))
@@ -39,25 +48,38 @@ def _run_pipeline(script: str, output_language: str, progress_q: "queue.Queue") 
         report(10, "✅ Script received — initialising workflow…")
 
         report(20, "⏳ Fetching live SEO context…")
-        seo_context = fetch_seo_data(script=script)
-        if not seo_context:
-            raise RuntimeError("SEO context could not be fetched.")
-        report(40, "✅ SEO context fetched")
+        try:
+            seo_context = fetch_seo_data(script=script)
+        except Exception as e:
+            # SEO context is enrichment, not critical — log it, warn the user,
+            # and continue the pipeline with empty SEO context instead of failing outright.
+            logger.exception("SEO fetch failed; continuing without SEO context")
+            seo_context = ""
+            report(35, f"⚠️ Skipping SEO context — {extract_friendly_error(e)}")
+        else:
+            if not seo_context:
+                report(35, "⚠️ No SEO results found — continuing without SEO context")
+            else:
+                report(40, "✅ SEO context fetched")
 
-        analyzer, writer = agents()
+        try:
+            analyzer, writer = agents()
+        except Exception as e:
+            logger.exception("Agent initialisation failed")
+            raise RuntimeError(extract_friendly_error(e)) from e
 
         report(55, "⏳ Analysing topic, audience, and emotion…")
         analysis_result = analysis_step(script=script, seo_context=seo_context, analyzer=analyzer)
         if not isinstance(analysis_result, dict) or "error" in analysis_result:
             err = (
-                analysis_result.get("error", "Unknown")
+                analysis_result.get("error", "Unknown error during analysis.")
                 if isinstance(analysis_result, dict)
-                else type(analysis_result).__name__
+                else "Unknown error during analysis."
             )
-            raise RuntimeError(f"Analysis failed: {err}")
+            raise RuntimeError(extract_friendly_error(err))
         analysis = analysis_result.get("analysis", "")
         if not analysis:
-            raise RuntimeError("Analysis completed but returned empty text.")
+            raise RuntimeError("The analysis step returned no content. Please try again.")
         report(75, "✅ Analysis complete")
 
         report(85, f"⏳ Crafting hooks and captions in {output_language}…")
@@ -70,24 +92,28 @@ def _run_pipeline(script: str, output_language: str, progress_q: "queue.Queue") 
         )
         if not isinstance(writing_result, dict) or "error" in writing_result:
             err = (
-                writing_result.get("error", "Unknown")
+                writing_result.get("error", "Unknown error while writing content.")
                 if isinstance(writing_result, dict)
-                else "Invalid output."
+                else "Unknown error while writing content."
             )
-            raise RuntimeError(f"Writing failed: {err}")
+            raise RuntimeError(extract_friendly_error(err))
 
         hooks = writing_result.get("hooks", [])
         caption = writing_result.get("caption", "")
         hashtags = writing_result.get("hashtags", [])
         if not hooks and not caption and not hashtags:
-            raise RuntimeError("Writer returned empty outputs.")
+            raise RuntimeError("The AI didn't return any usable content. Please try again.")
 
         report(100, "✅ Content generation finished")
         return {"hooks": hooks, "caption": caption, "hashtags": hashtags}
 
     except Exception as exc:
-        progress_q.put(("error", str(exc)))
-        raise
+        # Full technical detail -> server logs (for debugging).
+        logger.exception("Generation worker failed")
+        # Short, friendly detail -> UI (via progress queue and the re-raised exception).
+        friendly = extract_friendly_error(exc)
+        progress_q.put(("error", friendly))
+        raise RuntimeError(friendly) from exc
 
 
 def submit_job(script: str, output_language: str) -> Job:
